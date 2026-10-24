@@ -1,5 +1,4 @@
-import { Card, Checkbox, FilterTabs, InlineSelect, Select, TextField, Textarea, ToggleChip, ToggleSection } from '@vizier/design'
-import { useState } from 'react'
+import { Card, Checkbox, FilterTabs, Select, TextField, Textarea, ToggleChip, ToggleSection } from '@vizier/design'
 import {
     IMAGE_GEN_DEFAULT_MODELS,
     IMAGE_GEN_PROVIDERS,
@@ -23,7 +22,6 @@ const options = (values: string[]) => values.map((v) => ({ value: v, label: v })
 /** The Tools step of the wizard and Config's Tools tab: what the agent may use beyond memory. */
 export function ToolsFields({ form, errors, set }: Props) {
     const canShell = useCan(PERMISSIONS.shellConfig)
-    const [visionOpen, setVisionOpen] = useState(false)
 
     return (
         <div className="flex flex-col gap-16">
@@ -98,14 +96,6 @@ export function ToolsFields({ form, errors, set }: Props) {
                     <p className="type-small text-faint">Pictures go straight to the main model.</p>
                     <Checkbox label="Use a different model" checked={form.visionOwn} onChange={(e) => set({ visionOwn: e.target.checked })} />
                     {form.visionOwn && (
-                        <InlineSelect
-                            label="Vision model"
-                            value={form.visionModel ? `${form.visionProvider} · ${form.visionModel}` : 'Choose…'}
-                            open={visionOpen}
-                            onClick={() => setVisionOpen((o) => !o)}
-                        />
-                    )}
-                    {form.visionOwn && visionOpen && (
                         <ModelSelect
                             needsImages
                             provider={form.visionProvider}
