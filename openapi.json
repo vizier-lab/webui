@@ -8079,6 +8079,220 @@
         }
       }
     },
+    "/shares": {
+      "get": {
+        "tags": [
+          "api::v1::shares"
+        ],
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Keyset pagination: created_at timestamp",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max items to return (≤ 100, default 50)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "all",
+            "in": "query",
+            "description": "List all shares across instance (requires admin)",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of shares",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponse_Vec_ShareListItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "all=true requires admin permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "api::v1::shares"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created. The link is `url_path` on this instance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponse_CreatedShare"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid shape, format version, title or people"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Needs `owned_agents:share_conversations` for an agent the caller owns, or `all_agents:share_conversations`"
+          },
+          "413": {
+            "description": "The body is over 5 MiB"
+          },
+          "422": {
+            "description": "`trail_mismatch`: `include_trail` is false but the document holds trail parts; `secret_detected`: the text holds a PEM private key or a vendor-prefixed token (last-resort backstop, not redaction)"
+          },
+          "429": {
+            "description": "10 creates an hour (with `retry_after_secs`), or 200 active shares"
+          },
+          "503": {
+            "description": "Storage is unavailable"
+          }
+        }
+      }
+    },
+    "/shares/people": {
+      "get": {
+        "tags": [
+          "api::v1::shares"
+        ],
+        "operationId": "search_people",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Prefix match on username (≥ 2 characters)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching people",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponse_Vec_PersonMatch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Query too short"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Requires share permission"
+          }
+        }
+      }
+    },
+    "/shares/{share_id}": {
+      "get": {
+        "tags": [
+          "api::v1::shares"
+        ],
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "share_id",
+            "in": "path",
+            "description": "21 URL-safe characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The snapshot. Public shares: `Cache-Control: public, max-age=300, s-maxage=300` and `ETag`; others `private, no-store`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponse_ShareView"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "`If-None-Match` matches a public share"
+          },
+          "401": {
+            "description": "`sign_in_required`: no session, and the share is not an active public one (or does not exist; the same body)"
+          },
+          "404": {
+            "description": "`share_unavailable`: signed in, and the share is unknown, revoked, or not for this person (one body)"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "api::v1::shares"
+        ],
+        "operationId": "revoke",
+        "parameters": [
+          {
+            "name": "share_id",
+            "in": "path",
+            "description": "21 URL-safe characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked (or already revoked)"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Unknown share or not authorized to revoke"
+          }
+        }
+      }
+    },
     "/status": {
       "get": {
         "tags": [
@@ -10647,6 +10861,47 @@
           }
         }
       },
+      "APIResponse_CreatedShare": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "share_id",
+              "url_path",
+              "created_at"
+            ],
+            "properties": {
+              "created_at": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Unix milliseconds."
+              },
+              "share_id": {
+                "type": "string"
+              },
+              "url_path": {
+                "type": "string",
+                "description": "`/share/<id>`, relative to the instance's address."
+              }
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "APIResponse_CustomProviderResponse": {
         "type": "object",
         "required": [
@@ -12781,6 +13036,60 @@
           }
         }
       },
+      "APIResponse_ShareView": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "A share as `GET /shares/{id}` returns it. No field depends on who asks, and the audience\nkind is not among them (FR-030): a reader is not told who else can read.",
+            "required": [
+              "share_id",
+              "title",
+              "created_at",
+              "include_trail",
+              "format_version",
+              "snapshot"
+            ],
+            "properties": {
+              "created_at": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "format_version": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "include_trail": {
+                "type": "boolean"
+              },
+              "share_id": {
+                "type": "string"
+              },
+              "snapshot": {
+                "type": "object",
+                "description": "The stored document, as stored."
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "APIResponse_SignInResponse": {
         "type": "object",
         "required": [
@@ -14421,6 +14730,44 @@
           }
         }
       },
+      "APIResponse_Vec_PersonMatch": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A matching user for naming in `specific` audience (`GET /shares/people?q=`).\nReturns only `user_id` and `username` (no email or role leaks).",
+              "required": [
+                "user_id",
+                "username"
+              ],
+              "properties": {
+                "user_id": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "APIResponse_Vec_ProfileEntryResponse": {
         "type": "object",
         "required": [
@@ -15108,6 +15455,101 @@
                 },
                 "vizier_session": {
                   "$ref": "#/components/schemas/VizierSession"
+                }
+              }
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "APIResponse_Vec_ShareListItem": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A share item in a list (`GET /shares`).",
+              "required": [
+                "share_id",
+                "agent_id",
+                "agent_name",
+                "topic_id",
+                "audience",
+                "people_count",
+                "include_trail",
+                "size_bytes",
+                "created_at"
+              ],
+              "properties": {
+                "agent_id": {
+                  "type": "string"
+                },
+                "agent_name": {
+                  "type": "string"
+                },
+                "audience": {
+                  "$ref": "#/components/schemas/Audience"
+                },
+                "created_at": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "creator_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "include_trail": {
+                  "type": "boolean"
+                },
+                "people_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "removals": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "revoked_at": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64"
+                },
+                "share_id": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Withheld (absent) in the administrator's list for a share whose audience does not\ninclude the administrator (FR-043): the title comes from the conversation."
+                },
+                "topic_id": {
+                  "type": "string"
                 }
               }
             }
@@ -16770,6 +17212,15 @@
             "type": "boolean"
           }
         }
+      },
+      "Audience": {
+        "type": "string",
+        "description": "Who may open a share. Fixed at creation (there is no update).\n\nNothing outside [`Audience::allows`] and [`Audience::cache_policy`] branches on the variant\n(constitution II); the name used on the wire and in storage comes from one table.",
+        "enum": [
+          "specific",
+          "signed_in",
+          "public"
+        ]
       },
       "AuthorView": {
         "type": "object",
@@ -18567,6 +19018,56 @@
           }
         }
       },
+      "CreateShareRequest": {
+        "type": "object",
+        "description": "Documentation twin of the `POST /shares` body (the service reads the raw bytes itself).",
+        "required": [
+          "agent_id",
+          "topic_id",
+          "title",
+          "audience",
+          "snapshot"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/Audience"
+          },
+          "include_trail": {
+            "type": "boolean"
+          },
+          "people": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Required (1 to 50 existing people) when the audience is `specific`; absent otherwise."
+          },
+          "removals": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Counts by kind of what was left out (`credentials`, `paths`, `recall`, `reasoning`, `media`)."
+          },
+          "snapshot": {
+            "type": "object",
+            "description": "The document of `contracts/snapshot-format.md`, format version 1."
+          },
+          "title": {
+            "type": "string",
+            "description": "At most 120 characters."
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
       "CreateTaskRequest": {
         "type": "object",
         "required": [
@@ -18663,6 +19164,28 @@
           },
           "worktree": {
             "$ref": "#/components/schemas/WorktreeSummary"
+          }
+        }
+      },
+      "CreatedShare": {
+        "type": "object",
+        "required": [
+          "share_id",
+          "url_path",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds."
+          },
+          "share_id": {
+            "type": "string"
+          },
+          "url_path": {
+            "type": "string",
+            "description": "`/share/<id>`, relative to the instance's address."
           }
         }
       },
@@ -21853,6 +22376,22 @@
           }
         }
       },
+      "PersonMatch": {
+        "type": "object",
+        "description": "A matching user for naming in `specific` audience (`GET /shares/people?q=`).\nReturns only `user_id` and `username` (no email or role leaks).",
+        "required": [
+          "user_id",
+          "username"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
       "PieceState": {
         "type": "string",
         "enum": [
@@ -24223,6 +24762,114 @@
             "items": {
               "$ref": "#/components/schemas/SetupState"
             }
+          }
+        }
+      },
+      "ShareListItem": {
+        "type": "object",
+        "description": "A share item in a list (`GET /shares`).",
+        "required": [
+          "share_id",
+          "agent_id",
+          "agent_name",
+          "topic_id",
+          "audience",
+          "people_count",
+          "include_trail",
+          "size_bytes",
+          "created_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "agent_name": {
+            "type": "string"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/Audience"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "creator_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "include_trail": {
+            "type": "boolean"
+          },
+          "people_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "removals": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "share_id": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Withheld (absent) in the administrator's list for a share whose audience does not\ninclude the administrator (FR-043): the title comes from the conversation."
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ShareView": {
+        "type": "object",
+        "description": "A share as `GET /shares/{id}` returns it. No field depends on who asks, and the audience\nkind is not among them (FR-030): a reader is not told who else can read.",
+        "required": [
+          "share_id",
+          "title",
+          "created_at",
+          "include_trail",
+          "format_version",
+          "snapshot"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "format_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "include_trail": {
+            "type": "boolean"
+          },
+          "share_id": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "object",
+            "description": "The stored document, as stored."
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

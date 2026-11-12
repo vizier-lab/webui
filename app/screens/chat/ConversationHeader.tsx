@@ -1,26 +1,75 @@
 import { FadeRule } from '../shared/SideCard'
 import {
+    IconButton,
     MobileTopBar,
     SlideOver,
+    Tooltip,
     TopicHeader,
     type MobileTopBarAgent,
 } from '@vizier/design'
 import { nanoid } from 'nanoid'
 import { useEffect, useState, type ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
+import { sharesOfConversation } from '../../api/shares'
 import { agentState } from '../../api/endpoints/agents'
 import type { ConversationItem } from '../../api/endpoints/conversations'
+import { canShareConversations } from '../../lib/access'
 import { detailsPath } from '../../lib/agentDetails'
 import { conversationHref } from '../../lib/conversations'
 import { assetSrc } from '../../lib/fileUrls'
 import { useMobile } from '../../lib/useMobile'
 import { useAgents } from '../../stores/agents'
 import { useNav } from '../../stores/nav'
+import { useSession } from '../../stores/session'
 import { NotificationsBell } from '../shared/NotificationsBell'
 import { AgentConversations } from '../shell/AgentConversations'
 import { ConversationPicker } from './ConversationPicker'
+import { ShareDialog } from './ShareDialog'
+
+/** What the Share button needs; absent where a conversation cannot be shared (a channel read-out). */
+export type ShareTarget = {
+    topicId: string
+    agent: { owner_id?: string } | undefined
+    agentName: string
+    /** No messages yet: the button is disabled. */
+    empty: boolean
+}
+
+export const EMPTY_SHARE_REASON = 'Nothing to share yet'
+
+/** Wording of the "this chat is shared" mark (FR-038). */
+export const sharedLabel = (n: number) => (n === 1 ? 'Shared: 1 live link' : `Shared: ${n} live links`)
+
+/** How many live link shares this conversation has; 0 until known or when the list cannot be read. */
+export function useLiveShareCount(agentId: string, topicId: string | undefined, enabled: boolean): number {
+    const [count, setCount] = useState(0)
+    useEffect(() => {
+        if (!enabled || !topicId) {
+            setCount(0)
+            return
+        }
+        const ctl = new AbortController()
+        sharesOfConversation(agentId, topicId, ctl.signal).then(
+            (items) => !ctl.signal.aborted && setCount(items.length),
+            () => undefined
+        )
+        return () => ctl.abort()
+    }, [agentId, topicId, enabled])
+    return count
+}
+
+/** The mark itself: leads to the list of shares. Renders nothing for 0. */
+export function SharedMark({ count }: { count: number }) {
+    if (count < 1) return null
+    return (
+        <Link to="/settings/shares" className="type-small text-muted hover:text-fg underline underline-offset-4" aria-label={`${sharedLabel(count)}. Manage shares`}>
+            {sharedLabel(count)}
+        </Link>
+    )
+}
 
 type Props = {
+    share?: ShareTarget
     agentId: string
     title: string
     /** "webui · topic 3 of 5". */
@@ -54,7 +103,37 @@ export function ConversationHeader({
     mobileTrailing,
     agentName,
     status,
+    share,
 }: Props) {
+    useSession((s) => s.user) // the permission is read from the session; re-evaluate when it changes
+    const [sharing, setSharing] = useState(false)
+    const canShare = !!share && canShareConversations(share.agent)
+    const liveShares = useLiveShareCount(agentId, share?.topicId, canShare)
+    const shareButton = canShare ? (
+        <>
+            <SharedMark count={liveShares} />
+            {share.empty ? (
+                <Tooltip label={EMPTY_SHARE_REASON} side="bottom">
+                    <span>
+                        <IconButton variant="ghost" icon="link" aria-label={`Share this conversation. ${EMPTY_SHARE_REASON}`} disabled />
+                    </span>
+                </Tooltip>
+            ) : (
+                <IconButton variant="ghost" icon="link" aria-label="Share this conversation" onClick={() => setSharing(true)} />
+            )}
+            {sharing && (
+                <ShareDialog
+                    open
+                    onClose={() => setSharing(false)}
+                    agentId={agentId}
+                    topicId={share.topicId}
+                    title={title}
+                    agentName={share.agentName}
+                />
+            )}
+        </>
+    ) : null
+
     const mobile = useMobile()
     const setNavOpen = useNav((s) => s.setOpen)
     const setSwitcherOpen = useNav((s) => s.setSwitcherOpen)
@@ -86,7 +165,17 @@ export function ConversationHeader({
                         onSwitch: () => setSwitcherOpen(true),
                         onDetails: () => navigate(detailsPath(agentId)),
                     }}
-                    topic={{ title, onTopic: () => setOpen(true), actions: mobileTrailing }}
+                    topic={{
+                        title,
+                        meta,
+                        onTopic: () => setOpen(true),
+                        actions: (
+                            <div className="flex items-center gap-4">
+                                {shareButton}
+                                {mobileTrailing}
+                            </div>
+                        ),
+                    }}
                     trailing={<NotificationsBell />}
                 />
                 <SlideOver open={open} side="bottom" title="Topics" onClose={() => setOpen(false)}>
@@ -113,6 +202,7 @@ export function ConversationHeader({
             />
             <div className="flex-1" />
             {trailing}
+            {shareButton}
             <NotificationsBell />
         </header>
     )
