@@ -103,17 +103,31 @@ export default function Chat() {
 
     // The mic needs the agent's Speech-to-Text and "Ask for a spoken reply" its Text-to-Speech;
     // each is offered only once the agent is known to have it.
-    const [voice, setVoice] = useState<{ stt: boolean; tts: boolean }>()
+    const [voice, setVoice] = useState<{
+        stt: boolean
+        tts: boolean
+        liveVoice: boolean
+        /** The agent's hangover, in ms (G1); undefined leaves the spec's default. */
+        endOfUtteranceMs?: number
+    }>()
     useEffect(() => {
         let alive = true
         setVoice(undefined)
         getAgent(agentId)
             .then((detail) => {
-                if (alive) setVoice({ stt: detail.stt, tts: detail.tts })
+                //  is its own capability: on only when the agent's switch is on and it has
+                // both a recogniser and a voice (spec 055 FR-004).
+                if (alive)
+                    setVoice({
+                        stt: detail.stt,
+                        tts: detail.tts,
+                        liveVoice: detail.live_voice ?? false,
+                        endOfUtteranceMs: detail.live_voice_end_of_utterance_ms,
+                    })
             })
             .catch(() => {
                 /* offer both: the config read is not worth an error on the composer */
-                if (alive) setVoice({ stt: true, tts: true })
+                if (alive) setVoice({ stt: true, tts: true, liveVoice: false })
             })
         return () => {
             alive = false
@@ -521,6 +535,8 @@ export default function Chat() {
                         }}
                         sttEnabled={voice?.stt ?? false}
                         ttsEnabled={voice?.tts ?? false}
+                        liveVoiceEnabled={voice?.liveVoice ?? false}
+                        liveVoiceEndOfUtteranceMs={voice?.endOfUtteranceMs}
                         busy={state.phase !== 'idle'}
                         disabledReason={
                             failed
